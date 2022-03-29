@@ -1,0 +1,179 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r Load the data}
+url <- "https://archive.ics.uci.edu/ml/machine-learning-databases/00228/smsspamcollection.zip"
+
+if (!file.exists("smsspamcollection.zip")) 
+  {
+  download.file(url=url, destfile="smsspamcollection.zip", method="curl")
+  }
+unzip("smsspamcollection.zip")
+
+data_text <- read.delim("SMSSpamCollection", sep="\t", header=F, colClasses="character", quote="")
+```
+
+
+```{r}
+str(data_text)
+
+```
+
+
+```{r}
+head(data_text)
+```
+
+
+```{r}
+colnames(data_text) <- c("Class","Text")
+colnames(data_text)
+```
+
+
+```{r}
+data_text$Class <- factor(data_text$Class)
+prop.table(table(data_text$Class))
+```
+
+```{r Data Cleaning }
+library(tm)
+library(SnowballC)
+```
+
+
+```{r}
+corpus = VCorpus(VectorSource(data_text$Text))
+as.character(corpus[[1]])
+```
+
+
+```{r}
+corpus = tm_map(corpus, content_transformer(tolower))
+corpus = tm_map(corpus, removeNumbers)
+corpus = tm_map(corpus, removePunctuation)
+corpus = tm_map(corpus, removeWords, stopwords("english"))
+corpus = tm_map(corpus, stemDocument)
+corpus = tm_map(corpus, stripWhitespace)
+as.character(corpus[[1]])
+```
+
+
+```{r Creating a bag of words for the model}
+dtm = DocumentTermMatrix(corpus)
+```
+
+```{r}
+dtm
+```
+
+```{r}
+dtm = removeSparseTerms(dtm, 0.999)
+
+dim(dtm)
+```
+
+
+```{r}
+inspect(dtm[40:50, 10:15])
+```
+
+
+```{r Converting the word frequencies to Yes and No Labels}
+convert_count <- function(x) {
+  y <- ifelse(x > 0, 1,0)
+  y <- factor(y, levels=c(0,1), labels=c("No", "Yes"))
+  y
+}
+
+# Apply the convert_count function to get final training and testing DTMs
+datasetNB <- apply(dtm, 2, convert_count)
+
+dataset = as.data.frame(as.matrix(datasetNB))
+```
+
+
+```{r Building Word Frequency}
+freq<- sort(colSums(as.matrix(dtm)), decreasing=TRUE)
+tail(freq, 10)
+```
+
+
+```{r identifying terms that appears frequently}
+findFreqTerms(dtm, lowfreq=60) 
+```
+
+
+```{r}
+library(ggplot2)
+```
+
+
+```{r Plotting Word Frequency}
+wf<- data.frame(word=names(freq), freq=freq)
+head(wf)
+```
+
+
+```{r}
+pp <- ggplot(subset(wf, freq>100), aes(x=reorder(word, -freq), y =freq)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+pp
+```
+
+
+```{r}
+library(wordcloud)
+library(RColorBrewer)
+```
+
+
+```{r Building Word Cloud}
+set.seed(1234)
+wordcloud(words = wf$word, freq = wf$freq, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+```
+
+
+```{r  Adding the Class variable to the Dataset}
+dataset$Class = data_text$Class
+str(dataset$Class)
+```
+
+
+```{r Splitting into test and training set}
+set.seed(222)
+split = sample(2,nrow(dataset),prob = c(0.75,0.25),replace = TRUE)
+train_set = dataset[split == 1,]
+test_set = dataset[split == 2,] 
+
+prop.table(table(train_set$Class))
+```
+
+
+```{r}
+prop.table(table(test_set$Class))
+```
+
+```{r Model Fitting}
+library(caret)
+library(e1071)
+
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+system.time( classifier_nb <- naiveBayes(train_set, train_set$Class, laplace = 1,
+                                         trControl = control,tuneLength = 7) )
+```
+
+
+```{r Making Predictions and evaluating the Naive Bayes Classifier}
+nb_pred = predict(classifier_nb, type = 'class', newdata = test_set)
+
+confusionMatrix(nb_pred,test_set$Class)
+```
+
+
