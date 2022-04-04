@@ -35,7 +35,7 @@ This project was built by
 🧑‍💻 [Shashwat](https://github.com/shashwat2820) 🧑‍💻 [Vikanksh](https://github.com/vikanksh15)
 
 
-## Tech Stack
+## Tech Used
 
 - R Programming Language
 - Text Mining
